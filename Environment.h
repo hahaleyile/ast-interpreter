@@ -28,7 +28,11 @@ public:
 
     int getDeclVal(Decl *decl) {
         assert (mVars.find(decl) != mVars.end());
-        return mVars.find(decl)->second;
+        return mVars[decl];
+    }
+
+    bool hasDeclVal(Decl *decl) {
+        return mVars.find(decl) != mVars.end();
     }
 
     void bindStmt(Stmt *stmt, int val) {
@@ -63,12 +67,33 @@ public:
 class Environment {
     std::vector<StackFrame> mStack;
 
-    FunctionDecl *mFree;                /// Declartions to the built-in functions
+    /// Declartions to the built-in functions
+    FunctionDecl *mFree;
     FunctionDecl *mMalloc;
     FunctionDecl *mInput;
     FunctionDecl *mOutput;
 
     FunctionDecl *mEntry;
+
+    /// 定义一个全局变量字典，包括函数声明，如果是函数则值为函数的参数个数
+    std::map<Decl *, int> gVars;
+
+    void bindGDecl(Decl *decl, int parmNum) {
+        gVars[decl] = parmNum;
+    }
+
+    int getGDeclVal(Decl *decl) {
+        assert(gVars.find(decl) != gVars.end());
+        return gVars[decl];
+    }
+
+    int getDeclVal(Decl *decl) {
+        if (mStack.back().hasDeclVal(decl)) {
+            return mStack.back().getDeclVal(decl);
+        }
+        return getGDeclVal(decl);
+    }
+
 public:
     /// Get the declartions to the built-in functions
     Environment() : mStack(), mFree(NULL), mMalloc(NULL), mInput(NULL), mOutput(NULL), mEntry(NULL) {
@@ -84,6 +109,13 @@ public:
                 else if (fdecl->getName().equals("GET")) mInput = fdecl;
                 else if (fdecl->getName().equals("PRINT")) mOutput = fdecl;
                 else if (fdecl->getName().equals("main")) mEntry = fdecl;
+                else bindGDecl(fdecl, fdecl->getNumParams());
+            } else if (VarDecl *vdecl = dyn_cast<VarDecl>(*i)) {
+                IntegerLiteral *integer;
+                if (vdecl->hasInit() && (integer = dyn_cast<IntegerLiteral>(vdecl->getInit())))
+                    bindGDecl(vdecl, integer->getValue().getSExtValue());
+                else
+                    bindGDecl(vdecl, 0);
             }
         }
         mStack.push_back(StackFrame());
@@ -93,7 +125,6 @@ public:
         return mEntry;
     }
 
-    /// !TODO Support comparison operation
     void binop(BinaryOperator *bop) {
         Expr *left = bop->getLHS();
         Expr *right = bop->getRHS();
@@ -105,6 +136,23 @@ public:
                 Decl *decl = declexpr->getFoundDecl();
                 mStack.back().bindDecl(decl, val);
             }
+        } else if (bop->isAdditiveOp()) {
+            int val1 = mStack.back().getStmtVal(left);
+            int val2 = mStack.back().getStmtVal(right);
+            int result;
+            switch (bop->getOpcode()) {
+                case clang::BO_Add:
+                    result = val1 + val2;
+                    break;
+                case BO_Sub:
+                    result = val1 - val2;
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+
+            mStack.back().bindStmt(bop, result);
         }
     }
 
@@ -118,7 +166,11 @@ public:
              it != ie; ++it) {
             Decl *decl = *it;
             if (VarDecl *vardecl = dyn_cast<VarDecl>(decl)) {
-                mStack.back().bindDecl(vardecl, 0);
+                IntegerLiteral *integer;
+                if (vardecl->hasInit() && (integer = dyn_cast<IntegerLiteral>(vardecl->getInit())))
+                    mStack.back().bindDecl(vardecl, integer->getValue().getSExtValue());
+                else
+                    mStack.back().bindDecl(vardecl, 0);
             }
         }
     }
@@ -128,7 +180,7 @@ public:
         if (declref->getType()->isIntegerType()) {
             Decl *decl = declref->getFoundDecl();
 
-            int val = mStack.back().getDeclVal(decl);
+            int val = getDeclVal(decl);
             mStack.back().bindStmt(declref, val);
         }
     }
@@ -157,7 +209,10 @@ public:
             val = mStack.back().getStmtVal(decl);
             llvm::errs() << val;
         } else {
-            /// You could add your code here for Function call Return
+            StackFrame newFrame = StackFrame();
+            for (auto it = callexpr->arg_begin(), ie = callexpr->arg_end(); it != ie; it++) {
+                auto expr = *it;
+            }
         }
     }
 };
