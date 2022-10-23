@@ -6,6 +6,8 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendAction.h"
 #include "clang/Tooling/Tooling.h"
+#include <iostream>
+#include <fstream>
 
 using namespace clang;
 
@@ -28,7 +30,7 @@ public:
     }
 
     // 字面量整型没有子语句，所以不用 VisitStmt()
-    virtual void VisitIntegerLiteral(IntegerLiteral *integer){
+    virtual void VisitIntegerLiteral(IntegerLiteral *integer) {
 #ifndef NDEBUG
         integer->dump();
 #endif
@@ -40,7 +42,51 @@ public:
         expr->dump();
 #endif
         VisitStmt(expr);
-        mEnv->declref(expr);
+        mEnv->declRef(expr);
+    }
+
+    virtual void VisitIfStmt(IfStmt *stmt) {
+#ifndef NDEBUG
+        stmt->dump();
+#endif
+        Expr *cond = stmt->getCond();
+        Visit(cond);
+        if (mEnv->getStmtVal(cond)) {
+            Visit(stmt->getThen());
+        } else {
+            // 需要手动处理没有 Else 分支的情况
+            if (Stmt *elseStmt = stmt->getElse()) {
+                Visit(elseStmt);
+            }
+        }
+    }
+
+    virtual void VisitWhileStmt(WhileStmt *stmt) {
+#ifndef NDEBUG
+        stmt->dump();
+#endif
+        Expr *cond = stmt->getCond();
+        Visit(cond);
+        while (mEnv->getStmtVal(cond)) {
+            Visit(stmt->getBody());
+            Visit(cond);
+        }
+    }
+
+    virtual void VisitUnaryOperator(UnaryOperator *oper) {
+#ifndef NDEBUG
+        oper->dump();
+#endif
+        VisitStmt(oper);
+        mEnv->unaryop(oper);
+    }
+
+    virtual void VisitReturnStmt(ReturnStmt *stmt) {
+#ifndef NDEBUG
+        stmt->dump();
+#endif
+        VisitStmt(stmt);
+        mEnv->returnStmt(stmt);
     }
 
     virtual void VisitCastExpr(CastExpr *expr) {
@@ -56,7 +102,10 @@ public:
         call->dump();
 #endif
         VisitStmt(call);
-        mEnv->call(call);
+        if (mEnv->call(call)) {
+            FunctionDecl *entry = mEnv->getEntry();
+            VisitStmt(entry->getBody());
+        }
     }
 
     virtual void VisitDeclStmt(DeclStmt *declstmt) {
@@ -102,12 +151,15 @@ public:
     }
 };
 
-#include <iostream>
-#include <fstream>
 
 int main(int argc, char **argv) {
     if (argc > 1) {
-        std::ifstream t(argv[1]);
+        std::string filename = std::string(argv[1]);
+        std::string index;
+        std::cout << "请输入测试文件编号：" << std::endl;
+        std::cin >> index;
+        filename.append(index).append(".c");
+        std::ifstream t(filename);
         std::string buffer((std::istreambuf_iterator<char>(t)),
                            std::istreambuf_iterator<char>());
 #ifndef NDEBUG
