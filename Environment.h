@@ -218,6 +218,7 @@ public:
             Decl *decl = *it;
             if (VarDecl *vardecl = dyn_cast<VarDecl>(decl)) {
                 IntegerLiteral *integer;
+                auto t = vardecl->getType().getTypePtr();
                 if (vardecl->hasInit() && (integer = dyn_cast<IntegerLiteral>(vardecl->getInit())))
                     mStack.back().bindDecl(vardecl, integer->getValue().getSExtValue());
                 else
@@ -227,11 +228,15 @@ public:
     }
 
     void returnStmt(ReturnStmt *returnstmt) {
-        int val = mStack.back().getStmtVal(returnstmt->getRetValue());
-        CallExpr *origcall = mFuncs.back();
-        mFuncs.pop_back();
-        mStack.pop_back();
-        mStack.back().bindStmt(origcall, val);
+        Expr *body = returnstmt->getRetValue();
+        if (body) {
+            int val = mStack.back().getStmtVal(body);
+            CallExpr *origcall = mFuncs.back();
+            mFuncs.pop_back();
+            mStack.pop_back();
+            mStack.back().bindStmt(origcall, val);
+        } else
+            mStack.pop_back();
     }
 
     void declRef(DeclRefExpr *declref) {
@@ -277,7 +282,8 @@ public:
                 assert(parm = llvm::dyn_cast<ParmVarDecl>(callee->getParamDecl(i)));
                 newFrame.bindDecl(parm, subval);
             }
-            mFuncs.push_back(callexpr);
+            if (!callee->getReturnType()->isVoidType())
+                mFuncs.push_back(callexpr);
             mStack.push_back(newFrame);
             mEntry = callee;
             return true;
