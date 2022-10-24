@@ -73,6 +73,29 @@ public:
         }
     }
 
+    virtual void VisitForStmt(ForStmt *stmt) {
+#ifndef NDEBUG
+        stmt->dump();
+#endif
+        if (stmt->getInit())
+            Visit(stmt->getInit());
+        Expr *cond = stmt->getCond();
+        Stmt *body = stmt->getBody();
+        Expr *inc = stmt->getInc();
+        if (cond) {
+            Visit(cond);
+            while (mEnv->getStmtVal(cond)) {
+                if (body)
+                    Visit(body);
+                if (inc)
+                    Visit(inc);
+                Visit(cond);
+            }
+        } else {
+            exit(1);
+        }
+    }
+
     virtual void VisitUnaryOperator(UnaryOperator *oper) {
 #ifndef NDEBUG
         oper->dump();
