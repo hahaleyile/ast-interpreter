@@ -128,6 +128,8 @@ public:
         if (mEnv->call(call)) {
             FunctionDecl *entry = mEnv->getEntry();
             VisitStmt(entry->getBody());
+            if (call->getDirectCallee()->getReturnType()->isVoidType())
+                mEnv->popStackFrame();
         }
     }
 

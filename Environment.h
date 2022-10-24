@@ -107,6 +107,7 @@ public:
     }
 
     int getStmtVal(Stmt *stmt) { return mStack.back().getStmtVal(stmt); }
+    void popStackFrame(){mStack.pop_back();}
 
 
     /// Initialize the Environment
@@ -235,8 +236,7 @@ public:
             mFuncs.pop_back();
             mStack.pop_back();
             mStack.back().bindStmt(origcall, val);
-        } else
-            mStack.pop_back();
+        }
     }
 
     void declRef(DeclRefExpr *declref) {
