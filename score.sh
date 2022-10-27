@@ -13,7 +13,7 @@ while [ $((i)) -lt 25 ]; do
   i=$((i + 1))
 
   printf "%s\t" "$str"
-  if output="$(/home/black/ast-interpreter/cmake-build-debug/ast-interpreter /home/black/ast-interpreter/test/test "$str" 2>&1)"; then
+  if output="$(/home/black/ast-interpreter/cmake-build-debug/ast-interpreter "$(cat "/home/black/ast-interpreter/test/test$str.c")" 2>&1)"; then
     answer="$(eval "echo \${${i}}")"
     printf "%s\t$s\t" "$output" "$answer"
     if [ "$output" = "$answer" ]; then

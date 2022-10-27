@@ -255,14 +255,12 @@ public:
 
 int main(int argc, char **argv) {
     if (argc > 1) {
-        std::string filename = std::string(argv[1]);
+        clang::tooling::runToolOnCode(std::unique_ptr<clang::FrontendAction>(new InterpreterClassAction), argv[1]);
+    } else {
+        std::string filename("/home/black/ast-interpreter/test/test");
         std::string index;
-        if (argc > 2) {
-            index = std::string(argv[2]);
-        } else {
-            std::cout << "请输入测试文件编号：" << std::endl;
-            std::cin >> index;
-        }
+        std::cout << "请输入测试文件编号：" << std::endl;
+        std::cin >> index;
         filename.append(index).append(".c");
         std::ifstream t(filename);
         std::string buffer((std::istreambuf_iterator<char>(t)),
