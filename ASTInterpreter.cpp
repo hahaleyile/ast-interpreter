@@ -22,33 +22,32 @@ public:
     virtual ~InterpreterVisitor() {}
 
     virtual void VisitBinaryOperator(BinaryOperator *bop) {
-#ifndef NDEBUG
-        bop->dump();
-#endif
         VisitStmt(bop);
-        mEnv->binop(bop);
+        mEnv->binOp(bop);
     }
 
     // 字面量整型没有子语句，所以不用 VisitStmt()
     virtual void VisitIntegerLiteral(IntegerLiteral *integer) {
-#ifndef NDEBUG
-        integer->dump();
-#endif
         mEnv->integer(integer);
     }
 
+    virtual void VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr* expr)
+    {
+        mEnv->ueot(expr);
+    }
+
+    virtual void VisitParenExpr(ParenExpr* expr)
+    {
+        VisitStmt(expr);
+        mEnv->paren(expr);
+    }
+
     virtual void VisitDeclRefExpr(DeclRefExpr *expr) {
-#ifndef NDEBUG
-        expr->dump();
-#endif
         VisitStmt(expr);
         mEnv->declRef(expr);
     }
 
     virtual void VisitIfStmt(IfStmt *stmt) {
-#ifndef NDEBUG
-        stmt->dump();
-#endif
         Expr *cond = stmt->getCond();
         Visit(cond);
         if (mEnv->getStmtVal(cond)) {
@@ -62,9 +61,6 @@ public:
     }
 
     virtual void VisitWhileStmt(WhileStmt *stmt) {
-#ifndef NDEBUG
-        stmt->dump();
-#endif
         Expr *cond = stmt->getCond();
         Visit(cond);
         while (mEnv->getStmtVal(cond)) {
@@ -74,9 +70,6 @@ public:
     }
 
     virtual void VisitForStmt(ForStmt *stmt) {
-#ifndef NDEBUG
-        stmt->dump();
-#endif
         if (stmt->getInit())
             Visit(stmt->getInit());
         Expr *cond = stmt->getCond();
@@ -92,39 +85,35 @@ public:
                 Visit(cond);
             }
         } else {
-            exit(1);
+            throw std::exception();
         }
     }
 
+    virtual void VisitArraySubscriptExpr(ArraySubscriptExpr *expr) {
+        VisitStmt(expr);
+        mEnv->arraySubscript(expr);
+    }
+
     virtual void VisitUnaryOperator(UnaryOperator *oper) {
-#ifndef NDEBUG
-        oper->dump();
-#endif
         VisitStmt(oper);
-        mEnv->unaryop(oper);
+        mEnv->unaryOp(oper);
     }
 
     virtual void VisitReturnStmt(ReturnStmt *stmt) {
-#ifndef NDEBUG
-        stmt->dump();
-#endif
         VisitStmt(stmt);
         mEnv->returnStmt(stmt);
     }
 
     virtual void VisitCastExpr(CastExpr *expr) {
-#ifndef NDEBUG
-        expr->dump();
-#endif
         VisitStmt(expr);
         mEnv->cast(expr);
     }
 
     virtual void VisitCallExpr(CallExpr *call) {
-#ifndef NDEBUG
-        call->dump();
-#endif
-        VisitStmt(call);
+        Expr **args = call->getArgs();
+        for (int i = 0; i < call->getNumArgs(); i++) {
+            Visit(args[i]);
+        }
         if (mEnv->call(call)) {
             FunctionDecl *entry = mEnv->getEntry();
             VisitStmt(entry->getBody());
@@ -134,9 +123,6 @@ public:
     }
 
     virtual void VisitDeclStmt(DeclStmt *declstmt) {
-#ifndef NDEBUG
-        declstmt->dump();
-#endif
         mEnv->decl(declstmt);
     }
 
@@ -154,9 +140,6 @@ public:
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         TranslationUnitDecl *decl = Context.getTranslationUnitDecl();
-#ifndef NDEBUG
-        decl->dump();
-#endif
         mEnv.init(decl);
 
         FunctionDecl *entry = mEnv.getEntry();
@@ -181,15 +164,17 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         std::string filename = std::string(argv[1]);
         std::string index;
-        std::cout << "请输入测试文件编号：" << std::endl;
-        std::cin >> index;
+        if (argc>2)
+        {
+            index=std::string (argv[2]);
+        } else{
+            std::cout << "请输入测试文件编号：" << std::endl;
+            std::cin >> index;
+        }
         filename.append(index).append(".c");
         std::ifstream t(filename);
         std::string buffer((std::istreambuf_iterator<char>(t)),
                            std::istreambuf_iterator<char>());
-#ifndef NDEBUG
-        std::cout << buffer << std::endl;
-#endif
         clang::tooling::runToolOnCode(std::unique_ptr<clang::FrontendAction>(new InterpreterClassAction), buffer);
     }
 }
