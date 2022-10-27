@@ -127,6 +127,10 @@ public:
 
     void popStackFrame() { mStack.pop_back(); }
 
+    int getCurrentDepth(){
+        return mFuncs.size();
+    }
+
 
     /// Initialize the Environment
     void init(TranslationUnitDecl *unit) {

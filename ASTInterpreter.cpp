@@ -22,7 +22,14 @@ public:
     virtual ~InterpreterVisitor() {}
 
     virtual void VisitBinaryOperator(BinaryOperator *bop) {
-        VisitStmt(bop);
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: bop->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->binOp(bop);
     }
 
@@ -31,25 +38,40 @@ public:
         mEnv->integer(integer);
     }
 
-    virtual void VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr* expr)
-    {
+    virtual void VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *expr) {
         mEnv->ueot(expr);
     }
 
-    virtual void VisitParenExpr(ParenExpr* expr)
-    {
-        VisitStmt(expr);
+    virtual void VisitParenExpr(ParenExpr *expr) {
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: expr->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->paren(expr);
     }
 
     virtual void VisitDeclRefExpr(DeclRefExpr *expr) {
-        VisitStmt(expr);
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: expr->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->declRef(expr);
     }
 
     virtual void VisitIfStmt(IfStmt *stmt) {
         Expr *cond = stmt->getCond();
+        int depth = mEnv->getCurrentDepth();
         Visit(cond);
+        if (depth != mEnv->getCurrentDepth())
+            return;
         if (mEnv->getStmtVal(cond)) {
             Visit(stmt->getThen());
         } else {
@@ -62,27 +84,48 @@ public:
 
     virtual void VisitWhileStmt(WhileStmt *stmt) {
         Expr *cond = stmt->getCond();
+        int depth = mEnv->getCurrentDepth();
         Visit(cond);
+        if (depth != mEnv->getCurrentDepth())
+            return;
         while (mEnv->getStmtVal(cond)) {
             Visit(stmt->getBody());
+            if (depth != mEnv->getCurrentDepth())
+                return;
             Visit(cond);
+            if (depth != mEnv->getCurrentDepth())
+                return;
         }
     }
 
     virtual void VisitForStmt(ForStmt *stmt) {
-        if (stmt->getInit())
+        int depth = mEnv->getCurrentDepth();
+        if (stmt->getInit()) {
             Visit(stmt->getInit());
+            if (depth != mEnv->getCurrentDepth())
+                return;
+        }
         Expr *cond = stmt->getCond();
         Stmt *body = stmt->getBody();
         Expr *inc = stmt->getInc();
         if (cond) {
             Visit(cond);
+            if (depth != mEnv->getCurrentDepth())
+                return;
             while (mEnv->getStmtVal(cond)) {
-                if (body)
+                if (body) {
                     Visit(body);
-                if (inc)
+                    if (depth != mEnv->getCurrentDepth())
+                        return;
+                }
+                if (inc) {
                     Visit(inc);
+                    if (depth != mEnv->getCurrentDepth())
+                        return;
+                }
                 Visit(cond);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
             }
         } else {
             throw std::exception();
@@ -90,33 +133,76 @@ public:
     }
 
     virtual void VisitArraySubscriptExpr(ArraySubscriptExpr *expr) {
-        VisitStmt(expr);
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: expr->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->arraySubscript(expr);
     }
 
     virtual void VisitUnaryOperator(UnaryOperator *oper) {
-        VisitStmt(oper);
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: oper->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->unaryOp(oper);
     }
 
+    /// 常见错误情况是死循环
+    /// 光赋值返回值还不够，应该让这一层函数的所有语句立即返回
+    /// 错误情况是例如return语句是if的分支，则if语句里的VisitStmt都会执行完即使应该返回了
+    /// 这会导致本该返回的函数继续执行下面的语句，其中就有了call语句
+    /// 修复方法是在访问子语句前获取一次调用深读，访问之后再获取一次并比对是否一样
     virtual void VisitReturnStmt(ReturnStmt *stmt) {
-        VisitStmt(stmt);
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: stmt->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->returnStmt(stmt);
     }
 
     virtual void VisitCastExpr(CastExpr *expr) {
-        VisitStmt(expr);
+        int depth = mEnv->getCurrentDepth();
+        for (auto *SubStmt: expr->children()) {
+            if (SubStmt) {
+                Visit(SubStmt);
+                if (depth != mEnv->getCurrentDepth())
+                    return;
+            }
+        }
         mEnv->cast(expr);
     }
 
     virtual void VisitCallExpr(CallExpr *call) {
+        int depth = mEnv->getCurrentDepth();
         Expr **args = call->getArgs();
         for (int i = 0; i < call->getNumArgs(); i++) {
             Visit(args[i]);
+            if (depth != mEnv->getCurrentDepth())
+                return;
         }
         if (mEnv->call(call)) {
+            depth = mEnv->getCurrentDepth();
             FunctionDecl *entry = mEnv->getEntry();
-            VisitStmt(entry->getBody());
+            for (auto *SubStmt: entry->getBody()->children()) {
+                if (SubStmt) {
+                    Visit(SubStmt);
+                    if (depth != mEnv->getCurrentDepth())
+                        return;
+                }
+            }
             if (call->getDirectCallee()->getReturnType()->isVoidType())
                 mEnv->popStackFrame();
         }
@@ -143,7 +229,14 @@ public:
         mEnv.init(decl);
 
         FunctionDecl *entry = mEnv.getEntry();
-        mVisitor.VisitStmt(entry->getBody());
+        int depth = mEnv.getCurrentDepth();
+        for (auto *SubStmt: entry->getBody()->children()) {
+            if (SubStmt) {
+                mVisitor.Visit(SubStmt);
+                if (depth != mEnv.getCurrentDepth())
+                    return;
+            }
+        }
     }
 
 private:
@@ -164,10 +257,9 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         std::string filename = std::string(argv[1]);
         std::string index;
-        if (argc>2)
-        {
-            index=std::string (argv[2]);
-        } else{
+        if (argc > 2) {
+            index = std::string(argv[2]);
+        } else {
             std::cout << "请输入测试文件编号：" << std::endl;
             std::cin >> index;
         }
